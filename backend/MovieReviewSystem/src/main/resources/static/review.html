@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Movie Reviews</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    .card { margin-bottom: 20px; transition: box-shadow 0.3s ease; }
+    .card:hover { box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2); }
+    .like-btn:active, .dislike-btn:active { transform: scale(1.1); transition: transform 0.1s; }
+    .rounded-avatar { border-radius: 50%; width: 40px; height: 40px; object-fit: cover; margin-right: 10px; }
+    header { background-color: rgba(0, 0, 0, 0.85); padding: 15px 40px; display: flex; justify-content: space-between; align-items: center; }
+    header .logo { font-size: 1.5rem; font-weight: bold; color: white; }
+    nav a { color: white; margin-left: 20px; text-decoration: none; font-weight: bold; }
+    .comment-section { margin-top: 15px; padding-left: 50px; }
+    .comment { border-left: 2px solid #ddd; padding: 5px 10px; margin-bottom: 5px; }
+    .reply-btn { font-size: 0.8em; margin-left: 10px; cursor: pointer; }
+  </style>
+</head>
+<body>
+<div class="container mt-4">
+  <header>
+    <div class="logo">Movie Review</div>
+    <nav>
+        <a href="/index.html">Home</a>
+        <a href="/movies.html">Movies</a>
+        <a href="#" onclick="logout()">Logout</a>
+    </nav>
+  </header>
+
+  <h2 class="text-center mb-4">🎬 Reviews for Movie</h2>
+  <div id="reviews-container"></div>
+
+  <h4 class="mt-5">✨ Give Your Review</h4>
+  <form id="reviewForm" class="mt-3">
+    <div class="mb-3">
+      <label for="rating" class="form-label">Rating (1 to 5)</label>
+      <select class="form-select" id="rating" required>
+        <option selected disabled value="">Choose...</option>
+        <option value="1">⭐</option>
+        <option value="2">⭐⭐</option>
+        <option value="3">⭐⭐⭐</option>
+        <option value="4">⭐⭐⭐⭐</option>
+        <option value="5">⭐⭐⭐⭐⭐</option>
+      </select>
+    </div>
+    <div class="mb-3">
+      <label for="content" class="form-label">Your Comment</label>
+      <textarea class="form-control" id="content" rows="3" placeholder="Write your thoughts..." required></textarea>
+    </div>
+    <button type="submit" class="btn btn-primary">Submit Review</button>
+  </form>
+</div>
+
+<script>
+  const queryParams = new URLSearchParams(window.location.search);
+  const movieId = queryParams.get('movieId');
+  function logout() {
+    localStorage.removeItem("token");
+    localStorage.removeItem("userId");
+    window.location.href = "index.html";
+  }
+  if (!movieId) {
+    alert("Movie ID is missing in URL. Example: review.html?movieId=5");
+    throw new Error("Movie ID not found");
+  }
+
+  const apiBase = `http://localhost:8081/api/reviews/movie/${movieId}`;
+
+  async function fetchReviews() {
+    try {
+      const container = document.getElementById('reviews-container');
+      container.innerHTML = `<div class="text-center my-4"><div class="spinner-border text-primary" role="status"></div></div>`;
+
+      const response = await fetch(apiBase);
+      const reviews = await response.json();
+      container.innerHTML = '';
+
+      if (reviews.length === 0) {
+        container.innerHTML = '<div class="alert alert-info">No reviews yet.</div>';
+        return;
+      }
+
+      for (const review of reviews) {
+        const likeCountRes = await fetch(`http://localhost:8081/api/reviews/${review.id}/likes`);
+        const likeCount = await likeCountRes.json();
+
+        const dislikeCountRes = await fetch(`http://localhost:8081/api/reviews/${review.id}/dislikes`);
+        const dislikeCount = await dislikeCountRes.json();
+
+        const avatarURL = `https://ui-avatars.com/api/?name=${encodeURIComponent(review.user?.name || 'A')}`;
+        const card = document.createElement('div');
+        card.className = 'card';
+
+        card.innerHTML = `
+          <div class="card-body">
+            <div class="d-flex align-items-center mb-2">
+              <img src="${avatarURL}" alt="avatar" class="rounded-avatar">
+              <h5 class="mb-0">${review.user?.name || review.user?.email || 'Anonymous'}</h5>
+            </div>
+            <h6 class="card-subtitle mb-2">
+              <span class="badge bg-warning text-dark">${review.rating} ★</span>
+            </h6>
+            <p class="card-text">${review.content}</p>
+            <div>
+              <button class="btn btn-sm btn-outline-primary like-btn" onclick="likeReview(${review.id})">
+                👍 Like <span id="like-count-${review.id}">${likeCount}</span>
+              </button>
+              <button class="btn btn-sm btn-outline-danger dislike-btn" onclick="dislikeReview(${review.id})">
+                👎 Dislike <span id="dislike-count-${review.id}">${dislikeCount}</span>
+              </button>
+            </div>
+            <small class="text-muted">Posted on ${new Date(review.timestamp).toLocaleString()}</small>
+
+            <!-- Comment Section -->
+            <div class="comment-section">
+              <h6>💬 Comments</h6>
+              <div id="comments-${review.id}"></div>
+              <textarea id="comment-input-${review.id}" class="form-control mt-2" rows="2" placeholder="Write a comment..."></textarea>
+              <button class="btn btn-sm btn-secondary mt-1" onclick="postComment(${review.id})">Post</button>
+            </div>
+          </div>
+        `;
+
+        container.appendChild(card);
+        fetchComments(review.id);
+      }
+    } catch (error) {
+      console.error(error);
+      document.getElementById('reviews-container').innerHTML =
+        `<div class="alert alert-danger">Error loading reviews.</div>`;
+    }
+  }
+
+  async function likeReview(reviewId) {
+    const token = localStorage.getItem("token");
+    if (!token) { alert("Please log in to like reviews."); return; }
+    try {
+      await fetch(`http://localhost:8081/api/reviews/${reviewId}/like`, {
+        method: 'POST',
+        headers: { "Authorization": `Bearer ${token}` }
+      });
+      const countRes = await fetch(`http://localhost:8081/api/reviews/${reviewId}/likes`);
+      document.getElementById(`like-count-${reviewId}`).textContent = await countRes.json();
+    } catch (err) { console.error(err); alert("Failed to like review."); }
+  }
+
+  async function dislikeReview(reviewId) {
+    const token = localStorage.getItem("token");
+    if (!token) { alert("Please log in to dislike reviews."); return; }
+    try {
+      await fetch(`http://localhost:8081/api/reviews/${reviewId}/dislike`, {
+        method: 'POST',
+        headers: { "Authorization": `Bearer ${token}` }
+      });
+      const countRes = await fetch(`http://localhost:8081/api/reviews/${reviewId}/dislikes`);
+      document.getElementById(`dislike-count-${reviewId}`).textContent = await countRes.json();
+    } catch (err) { console.error(err); alert("Failed to dislike review."); }
+  }
+
+  async function fetchComments(reviewId) {
+    try {
+      const res = await fetch(`http://localhost:8081/api/comments/review/${reviewId}`);
+      const comments = await res.json();
+      const container = document.getElementById(`comments-${reviewId}`);
+      container.innerHTML = comments.length
+        ? comments.map(c => `<div class="comment"><strong>${c.user?.name || 'USER'}:</strong> ${c.content}</div>`).join('')
+        : `<div class="text-muted">No comments yet.</div>`;
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  async function postComment(reviewId) {
+    const token = localStorage.getItem("token");
+    if (!token) { alert("Please log in to comment."); return; }
+    const content = document.getElementById(`comment-input-${reviewId}`).value.trim();
+    if (!content) return;
+    try {
+      const res = await fetch(`http://localhost:8081/api/comments/review/${reviewId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ content: content, parentId: null })
+      });
+      if (res.ok) {
+        document.getElementById(`comment-input-${reviewId}`).value = '';
+        fetchComments(reviewId);
+      } else {
+        alert("Failed to post comment.");
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  document.getElementById('reviewForm').addEventListener('submit', async function (e) {
+    e.preventDefault();
+    const rating = parseInt(document.getElementById('rating').value);
+    const content = document.getElementById('content').value;
+    const token = localStorage.getItem("token");
+    if (!token) { alert("Please log in to submit a review."); return; }
+    try {
+      const res = await fetch(apiBase, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ rating, content })
+      });
+      if (res.ok) {
+        document.getElementById('reviewForm').reset();
+        fetchReviews();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      } else {
+        alert('Error submitting review.');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Network error.');
+    }
+  });
+
+  fetchReviews();
+</script>
+</body>
+</html>

@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Movies</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f3f3f3;
+            margin: 0;
+            padding: 20px;
+        }
+        header {
+            background-color: rgba(0, 0, 0, 0.85);
+            padding: 15px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        header .logo {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: white;
+        }
+
+        nav a {
+            color: white;
+            margin-left: 20px;
+            text-decoration: none;
+            font-weight: bold;
+        }
+
+        h1 {
+            text-align: center;
+        }
+
+        .search-bar {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .search-bar input {
+            padding: 10px;
+            width: 300px;
+            border-radius: 5px;
+            border: none;
+            font-size: 14px;
+        }
+
+        .admin-btn {
+            padding: 10px 20px;
+            margin: 0 5px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        .movie-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            justify-content: center;
+        }
+
+        .movie-card {
+            background-color: white;
+            width: 300px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            overflow: hidden;
+            transition: transform 0.2s;
+            cursor: pointer;
+        }
+
+        .movie-card:hover {
+            transform: scale(1.02);
+        }
+
+        .movie-image {
+            width: 100%;
+            height: 400px;
+            object-fit: cover;
+        }
+
+        .movie-content {
+            padding: 15px;
+        }
+
+        .movie-title {
+            font-size: 20px;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .movie-date, .movie-genre {
+            font-size: 14px;
+            color: #555;
+            margin-bottom: 5px;
+        }
+
+        .movie-description {
+            font-size: 14px;
+            color: #333;
+        }
+
+        .admin-actions {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px;
+            background: #f0f0f0;
+        }
+
+        .admin-action-btn {
+            background-color: #dc3545;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        .admin-action-btn:first-child {
+            background-color: #28a745;
+        }
+    </style>
+</head>
+<body>
+    <header>
+    <div class="logo">Movie Review</div>
+    <nav>
+        <a href="/index.html">Home</a>
+        <a href="/movies.html">Movies</a>
+        <a href="#" onclick="logout()">Logout</a>
+    </nav>
+</header>
+    <h1>🎬 Now Showing</h1>
+
+    <div class="search-bar">
+        <input type="text" id="searchInput" placeholder="Search movies..." oninput="searchMovies()" />
+        <button class="admin-btn" onclick="loadTopRated()">Top Rated</button>
+        
+    </div>
+
+    <div id="movies" class="movie-container"></div>
+
+    <script>
+        const token = localStorage.getItem("token");
+        const isAdmin = localStorage.getItem("role") === "ROLE_ADMIN";
+        const isAdminMode = true; // can toggle based on actual user UI
+
+        window.onload = () => loadMovies();
+
+        function loadMovies() {
+            fetch("/api/admin/movies", {
+                method: "GET",
+                headers: {
+                    "Authorization": `Bearer ${token}`
+                }
+            })
+            .then(res => res.json())
+            .then(data => displayMovies(data))
+            .catch(error => {
+                console.error("Error fetching movies:", error);
+                alert("Error loading movies");
+            });
+        }
+
+        function loadTopRated() {
+            fetch("http://localhost:8081/api/movies/top-rated", {
+                method: "GET",
+                headers: {
+                    "Authorization": `Bearer ${token}`
+                }
+            })
+            .then(res => res.json())
+            .then(movies => displayMovies(movies))
+            .catch(err => {
+                console.error("Failed to load top-rated movies", err);
+                alert("Failed to load top-rated movies");
+            });
+        }
+
+        function displayMovies(movies) {
+            const container = document.getElementById("movies");
+            container.innerHTML = '';
+
+            if (!movies || movies.length === 0) {
+                container.innerHTML = "<p style='text-align: center;'>No movies found.</p>";
+                return;
+            }
+
+            movies.forEach(movie => {
+                const adminActions = isAdmin && isAdminMode ? `
+                    <div class="admin-actions">
+                        <button class="admin-action-btn" onclick="editMovie(${movie.id}); event.stopPropagation();">Edit</button>
+                        <button class="admin-action-btn" onclick="deleteMovie(${movie.id}); event.stopPropagation();">Delete</button>
+                    </div>
+                ` : '';
+
+                const movieCard = `
+                    <div class="movie-card" onclick="${isAdmin ? '' : `window.location.href='review.html?movieId=${movie.id}'`}">
+                        ${adminActions}
+                        <img src="${movie.imageUrl}" alt="${movie.title}" class="movie-image"
+                            onerror="this.onerror=null; this.src='https://via.placeholder.com/300x400?text=No+Image';" />
+                        <div class="movie-content">
+                            <div class="movie-title">${movie.title}</div>
+                            <div class="movie-date">Release Date: ${movie.releaseDate}</div>
+                            <div class="movie-genre">Genre: ${movie.genre}</div>
+                            <p class="movie-description">${movie.description}</p>
+                        </div>
+                    </div>
+                `;
+                container.innerHTML += movieCard;
+            });
+        }
+        function logout() {
+    localStorage.removeItem("token");
+    localStorage.removeItem("userId");
+    window.location.href = "index.html"; // Redirect to login page
+}
+
+
+        function searchMovies() {
+            const query = document.getElementById("searchInput").value.toLowerCase();
+
+            fetch("/api/admin/movies", {
+                method: "GET",
+                headers: {
+                    "Authorization": `Bearer ${token}`
+                }
+            })
+            .then(res => res.json())
+            .then(movies => {
+                const filtered = movies.filter(movie =>
+                    movie.title.toLowerCase().includes(query)
+                );
+                displayMovies(filtered);
+            })
+            .catch(error => {
+                console.error("Search failed", error);
+                alert("Search failed");
+            });
+        }
+
+        function editMovie(id) {
+            // Redirect or open edit form
+            alert("Edit functionality is not implemented yet for Movie ID: " + id);
+        }
+
+        function deleteMovie(id) {
+            if (confirm("Are you sure you want to delete this movie?")) {
+                fetch(`/api/admin/movies/${id}`, {
+                    method: "DELETE",
+                    headers: {
+                        "Authorization": `Bearer ${token}`
+                    }
+                })
+                .then(res => {
+                    if (res.ok) {
+                        alert("Movie deleted");
+                        loadMovies();
+                    } else {
+                        alert("Failed to delete");
+                    }
+                });
+            }
+        }
+    </script>
+</body>
+</html>

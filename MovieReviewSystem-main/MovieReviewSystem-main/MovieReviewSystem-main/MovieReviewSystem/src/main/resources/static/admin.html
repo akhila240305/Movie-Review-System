@@ -1,0 +1,289 @@
+<!-- admin-users.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Admin User & Movie Management</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+          background: linear-gradient(135deg, #1a1a1a, #2c2c2c);
+          color: white;
+          font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        .container {
+          margin-top: 40px;
+        }
+        .table {
+          background-color: #2c2c2c;
+        }
+        th, td {
+          vertical-align: middle;
+        }
+        .form-select, .form-control {
+          background-color: #3a3a3a;
+          color: white;
+          border: 1px solid #555;
+        }
+        .btn-danger, .btn-primary, .btn-success {
+          padding: 6px 12px;
+        }
+        .header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        }
+        .movie-controls {
+          margin-top: 60px;
+        }
+        .movie-controls h3 {
+          margin-bottom: 15px;
+        }
+        #movieList .card img {
+          height: 220px;
+          object-fit: cover;
+        }
+        .movie-actions {
+          margin-top: 10px;
+        }
+        #movieFormContainer {
+          background: #2e2e2e;
+          border-radius: 10px;
+          padding: 20px;
+          box-shadow: 0 0 15px rgba(255, 77, 77, 0.2);
+          margin-bottom: 30px;
+        }
+        .form-control::placeholder {
+          color: #ccc;
+        }
+        .card {
+          border: 1px solid #444;
+          transition: transform 0.2s ease;
+        }
+        .card:hover {
+          transform: scale(1.02);
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header mb-4">
+        <h2>👥 Admin User & Movie Management</h2>
+        <button class="btn btn-secondary" onclick="logout()">Logout</button>
+    </div>
+
+    <!-- User Management Section -->
+    <table class="table table-dark table-hover">
+        <thead>
+        <tr>
+            <th>ID</th>
+            <th>Name</th>
+            <th>Email</th>
+            <th>Role</th>
+            <th>Change Role</th>
+            <th>Delete</th>
+        </tr>
+        </thead>
+        <tbody id="userTable"></tbody>
+    </table>
+
+    <!-- Movie Management Section -->
+    <div class="movie-controls">
+        <h3>🎬 Manage Movies</h3>
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="text-light">Add or Edit Movie</h5>
+            <button class="btn btn-success" onclick="showAddMovieForm()">➕ Add Movie</button>
+        </div>
+
+        <div id="movieFormContainer" style="display:none;">
+            <form id="movieForm">
+                <input type="hidden" id="movieId">
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <input class="form-control" id="title" placeholder="Title" required>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <input class="form-control" id="genre" placeholder="Genre" required>
+                    </div>
+                    <div class="col-12 mb-3">
+                        <textarea class="form-control" id="description" placeholder="Description" required></textarea>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <input class="form-control" type="date" id="releaseDate" required>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <input class="form-control" id="imageUrl" placeholder="Image URL" required>
+                    </div>
+                    <div class="col-12 text-end">
+                        <button class="btn btn-primary" type="submit">💾 Save</button>
+                        <button class="btn btn-secondary" type="button" onclick="hideMovieForm()">❌ Cancel</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        <div id="movieList" class="row mt-4 g-4"></div>
+    </div>
+</div>
+<script>
+    const token = localStorage.getItem("token");
+   let users = [], movies = [];
+
+   async function fetchUsers() {
+       const res = await fetch("/api/admin/users", {
+           headers: { "Authorization": `Bearer ${token}` }
+       });
+       users = await res.json();
+       renderUsers(users);
+   }
+
+   function renderUsers(list) {
+       const table = document.getElementById("userTable");
+       table.innerHTML = "";
+       list.forEach(user => {
+           table.innerHTML += `
+               <tr>
+                   <td>${user.id}</td>
+                   <td>${user.name}</td>
+                   <td>${user.email}</td>
+                   <td>${user.role}</td>
+                   <td>
+                       <select onchange="changeRole(${user.id}, this.value)" class="form-select">
+                           <option ${user.role==='USER'?'selected':''}>USER</option>
+                           <option ${user.role==='ADMIN'?'selected':''}>ADMIN</option>
+                           <option ${user.role==='REVIEWER'?'selected':''}>REVIEWER</option>
+                       </select>
+                   </td>
+                   <td><button class="btn btn-danger btn-sm" onclick="deleteUser(${user.id})">Delete</button></td>
+               </tr>
+           `;
+       });
+   }
+
+   async function changeRole(userId, newRole) {
+       const res = await fetch(`/api/admin/users/${userId}/role?role=${newRole}`, {
+           method: "PUT",
+           headers: { "Authorization": `Bearer ${token}` }
+       });
+       if (res.ok) {
+           alert("Role updated successfully");
+           fetchUsers();
+       }
+   }
+
+   async function deleteUser(userId) {
+       if (!confirm("Are you sure you want to delete this user?")) return;
+       const res = await fetch(`/api/admin/users/${userId}`, {
+           method: "DELETE",
+           headers: { "Authorization": `Bearer ${token}` }
+       });
+       if (res.ok) {
+           alert("User deleted successfully");
+           fetchUsers();
+       }
+   }
+
+   function logout() {
+       localStorage.removeItem("token");
+       window.location.href = "/index.html";
+   }
+
+   async function fetchMovies() {
+       const res = await fetch("/api/admin/movies", {
+           headers: { "Authorization": `Bearer ${token}` }
+       });
+       movies = await res.json();
+       renderMovies();
+   }
+
+   function renderMovies() {
+       const container = document.getElementById("movieList");
+       container.innerHTML = "";
+       movies.forEach(movie => {
+           container.innerHTML += `
+               <div class="col-md-4">
+                   <div class="card bg-dark text-white h-100">
+                       <img src="${movie.imageUrl}" class="card-img-top" alt="${movie.title}" onerror="this.onerror=null; this.src='/assets/no-image.png';">
+                       <div class="card-body">
+                           <h5 class="card-title">${movie.title}</h5>
+                           <p class="card-text small">${movie.description}</p>
+                           <p class="text-muted small">${movie.genre} | ${movie.releaseDate}</p>
+                           <div class="movie-actions">
+                               <button class="btn btn-warning btn-sm" onclick="editMovie(${movie.id})">Edit</button>
+                               <button class="btn btn-danger btn-sm" onclick="deleteMovie(${movie.id})">Delete</button>
+                           </div>
+                       </div>
+                   </div>
+               </div>
+           `;
+       });
+   }
+
+   function showAddMovieForm() {
+       document.getElementById("movieForm").reset();
+       document.getElementById("movieId").value = "";
+       document.getElementById("movieFormContainer").style.display = "block";
+       window.scrollTo({ top: document.getElementById("movieFormContainer").offsetTop - 100, behavior: "smooth" });
+   }
+
+   function hideMovieForm() {
+       document.getElementById("movieFormContainer").style.display = "none";
+   }
+
+   async function editMovie(id) {
+       const movie = movies.find(m => m.id === id);
+       if (!movie) return;
+       document.getElementById("movieId").value = movie.id;
+       document.getElementById("title").value = movie.title;
+       document.getElementById("genre").value = movie.genre;
+       document.getElementById("description").value = movie.description;
+       document.getElementById("releaseDate").value = movie.releaseDate;
+       document.getElementById("imageUrl").value = movie.imageUrl;
+       document.getElementById("movieFormContainer").style.display = "block";
+       window.scrollTo({ top: document.getElementById("movieFormContainer").offsetTop - 100, behavior: "smooth" });
+   }
+
+   async function deleteMovie(id) {
+       if (!confirm("Are you sure you want to delete this movie?")) return;
+       await fetch(`/api/admin/movies/${id}`, {
+           method: "DELETE",
+           headers: { "Authorization": `Bearer ${token}` }
+       });
+       alert("Movie deleted successfully");
+       fetchMovies();
+   }
+
+   document.getElementById("movieForm").addEventListener("submit", async function(e) {
+       e.preventDefault();
+       const id = document.getElementById("movieId").value;
+       const movie = {
+           title: document.getElementById("title").value,
+           genre: document.getElementById("genre").value,
+           description: document.getElementById("description").value,
+           releaseDate: document.getElementById("releaseDate").value,
+           imageUrl: document.getElementById("imageUrl").value
+       };
+       const url = id ? `/api/admin/movies/${id}` : "/api/admin/movies";
+       const method = id ? "PUT" : "POST";
+
+       const res = await fetch(url, {
+           method,
+           headers: {
+               "Content-Type": "application/json",
+               "Authorization": `Bearer ${token}`
+           },
+           body: JSON.stringify(movie)
+       });
+
+       if (res.ok) {
+           alert("Movie saved successfully");
+           hideMovieForm();
+           fetchMovies();
+       }
+   });
+
+   fetchUsers();
+   fetchMovies();
+</script>
+</body>
+</html>
